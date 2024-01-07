@@ -114,9 +114,20 @@ class Attention(nn.Module):
         qkv = self.qkv_dwconv(self.qkv(x))
         q,k,v = qkv.chunk(3, dim=1)   
         
-        q = rearrange(q, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-        k = rearrange(k, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-        v = rearrange(v, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
+        '''
+        https://github.com/swz30/Restormer/pull/56
+
+        Make q, k, and v contiguous to get better performance for normalize.
+        After the rearrange operations for q, k, and v, normalizations on the last dim for q and k will be applied.
+        The non-contiguous memory format makes the performance of normalize on the last dim poor.
+        '''
+        # q = rearrange(q, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
+        # k = rearrange(k, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
+        # v = rearrange(v, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
+
+        q = rearrange(q, 'b (head c) h w -> b head c (h w)', head=self.num_heads).contiguous(memory_format=torch.contiguous_format)
+        k = rearrange(k, 'b (head c) h w -> b head c (h w)', head=self.num_heads).contiguous(memory_format=torch.contiguous_format)
+        v = rearrange(v, 'b (head c) h w -> b head c (h w)', head=self.num_heads).contiguous(memory_format=torch.contiguous_format)
 
         q = torch.nn.functional.normalize(q, dim=-1)
         k = torch.nn.functional.normalize(k, dim=-1)
