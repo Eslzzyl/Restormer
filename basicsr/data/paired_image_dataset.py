@@ -12,6 +12,8 @@ import random
 import numpy as np
 import torch
 import cv2
+from natsort import natsorted
+from glob import glob
 
 class Dataset_PairedImage(data.Dataset):
     """Paired image dataset for image restoration.
@@ -97,6 +99,105 @@ class Dataset_PairedImage(data.Dataset):
             img_lq = imfrombytes(img_bytes, float32=True)
         except:
             raise Exception("lq path {} not working".format(lq_path))
+
+        # augmentation for training
+        if self.opt['phase'] == 'train':
+            gt_size = self.opt['gt_size']
+            # padding
+            img_gt, img_lq = padding(img_gt, img_lq, gt_size)
+
+            # random crop
+            img_gt, img_lq = paired_random_crop(img_gt, img_lq, gt_size, scale,
+                                                gt_path)
+
+            # flip, rotation augmentations
+            if self.geometric_augs:
+                img_gt, img_lq = random_augmentation(img_gt, img_lq)
+            
+        # BGR to RGB, HWC to CHW, numpy to tensor
+        img_gt, img_lq = img2tensor([img_gt, img_lq],
+                                    bgr2rgb=True,
+                                    float32=True)
+        # normalize
+        if self.mean is not None or self.std is not None:
+            normalize(img_lq, self.mean, self.std, inplace=True)
+            normalize(img_gt, self.mean, self.std, inplace=True)
+        
+        return {
+            'lq': img_lq,
+            'gt': img_gt,
+            'lq_path': lq_path,
+            'gt_path': gt_path
+        }
+
+    def __len__(self):
+        return len(self.paths)
+
+class Dataset_GTRAIN(data.Dataset):
+    """Paired image dataset port for GT-RAIN dataset.
+
+    Read LQ (rain) and GT image pairs.
+
+    Args:
+        opt (dict): Config for train datasets. It contains the following keys:
+            dataroot (str): Data root path for GT-RAIN dataset.
+            io_backend (dict): IO backend type and other kwarg.
+            filename_tmpl (str): Template for each filename. Note that the
+                template excludes the file extension. Default: '{}'.
+            gt_size (int): Cropped patched size for gt patches.
+            geometric_augs (bool): Use geometric augmentations.
+
+            scale (bool): Scale, which will be added automatically.
+            phase (str): 'train' or 'val'.
+    """
+
+    def __init__(self, opt):
+        super(Dataset_GTRAIN, self).__init__()
+        self.opt = opt
+        # file client (io backend)
+        self.file_client = None
+        self.io_backend_opt = opt['io_backend']
+        self.mean = opt['mean'] if 'mean' in opt else None
+        self.std = opt['std'] if 'std' in opt else None
+        
+        self.dataroot = opt['dataroot']
+        if 'filename_tmpl' in opt:
+            self.filename_tmpl = opt['filename_tmpl']
+        else:
+            self.filename_tmpl = '{}'
+
+        self.paths = []
+        scene_paths = natsorted(glob(f"{self.dataroot}/*"))
+        for scene_path in scene_paths:
+            rainy_img_paths = natsorted(glob(scene_path + '/*R-*.png'))
+            self.paths.extend(rainy_img_paths)
+
+        if self.opt['phase'] == 'train':
+            self.geometric_augs = opt['geometric_augs']
+
+    def __getitem__(self, index):
+        if self.file_client is None:
+            self.file_client = FileClient(
+                self.io_backend_opt.pop('type'), **self.io_backend_opt)
+
+        scale = self.opt['scale']
+        index = index % len(self.paths)
+        # Load gt and lq images. Dimension order: HWC; channel order: BGR;
+        # image range: [0, 1], float32.
+        lq_path = self.paths[index]
+        img_bytes = self.file_client.get(lq_path, 'lq')
+        try:
+            img_lq = imfrombytes(img_bytes, float32=True)
+        except:
+            raise Exception("lq path {} not working".format(lq_path))
+        
+        scene_name = lq_path.split('/')[-2]
+        gt_path = glob(self.dataroot + scene_name + '/*C-000.png')[0]
+        img_bytes = self.file_client.get(gt_path, 'gt')
+        try:
+            img_gt = imfrombytes(img_bytes, float32=True)
+        except:
+            raise Exception("gt path {} not working".format(gt_path))
 
         # augmentation for training
         if self.opt['phase'] == 'train':
