@@ -161,6 +161,8 @@ class Dataset_GTRAIN(data.Dataset):
         self.std = opt['std'] if 'std' in opt else None
         
         self.dataroot = opt['dataroot']
+        if self.dataroot[-1] != '/':
+            self.dataroot += '/'
         if 'filename_tmpl' in opt:
             self.filename_tmpl = opt['filename_tmpl']
         else:

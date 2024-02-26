@@ -1,5 +1,6 @@
 # 针对 GT-RAIN 定制的 Restormer 训练配置。
 # 除了数据集相关的配置外，没有更改任何其他配置。
+# 该配置可以在单卡 Tesla V100 上训练。
 
 # general settings
 name: GTRAIN
