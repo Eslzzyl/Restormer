@@ -18,8 +18,8 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 parser = argparse.ArgumentParser(description='Image Deraining using Restormer')
 
-parser.add_argument('--input_dir', default='/autodl-tmp/GT-RAIN/GT-RAIN_test/', type=str, help='Directory of validation images')
-parser.add_argument('--result_dir', default='/autodl-tmp/GT-RAIN/model-results/Restormer/', type=str, help='Directory for results')
+parser.add_argument('--input_dir', default='/root/autodl-tmp/GT-RAIN/GT-RAIN_test/', type=str, help='Directory of validation images')
+parser.add_argument('--result_dir', default='/root/autodl-tmp/GT-RAIN/model-results/Restormer/', type=str, help='Directory for results')
 parser.add_argument('--weights', default='./pretrained_models/net_g_latest.pth', type=str, help='Path to weights')
 
 args = parser.parse_args()
@@ -57,6 +57,9 @@ os.makedirs(root_dir, exist_ok=True)
 scene_paths = natsorted(glob(f"{root_dir}/*"))
 files = []
 for scene_path in scene_paths:
+    scene_name = scene_path.split('/')[-1]
+    out_path = os.path.join(result_dir, scene_name)
+    os.makedirs(out_path, exist_ok=True)
     rainy_img_paths = natsorted(glob(scene_path + '/*R-*.png'))
     files.extend(rainy_img_paths)
 psnr_in = 0
@@ -89,7 +92,8 @@ with torch.no_grad():
 
         filename = file_.split('/')[-1]
         scene_name = file_.split('/')[-2]
-        utils.save_img(os.path.join(result_dir, scene_name, filename), img_as_ubyte(restored))
+        save_name = os.path.join(result_dir, scene_name, filename)
+        utils.save_img(save_name, img_as_ubyte(restored))
 
         gt_file = glob(root_dir + scene_name + '/*C-000.png')[0]
         gt = np.float32(utils.load_img(gt_file))/255.
