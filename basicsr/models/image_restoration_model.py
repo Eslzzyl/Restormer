@@ -8,6 +8,7 @@ from tqdm import tqdm
 from basicsr.models.archs import define_network
 from basicsr.models.base_model import BaseModel
 from basicsr.utils import get_root_logger, imwrite, tensor2img
+from basicsr.utils.guided_filter import guided_filter
 
 loss_module = importlib.import_module('basicsr.models.losses')
 metric_module = importlib.import_module('basicsr.metrics')
@@ -149,6 +150,7 @@ class ImageCleanModel(BaseModel):
     def optimize_parameters(self, current_iter):
         self.optimizer_g.zero_grad()
         preds = self.net_g(self.lq)
+        preds, base = preds
         if not isinstance(preds, list):
             preds = [preds]
 
@@ -158,7 +160,9 @@ class ImageCleanModel(BaseModel):
         # pixel loss
         l_pix = 0.
         for pred in preds:
-            l_pix += self.cri_pix(pred, self.gt)
+            gt_base = guided_filter(self.gt, self.gt, 15, 1)
+            gt_detail = self.gt - gt_base
+            l_pix += self.cri_pix(pred, gt_detail)
 
         loss_dict['l_pix'] = l_pix
 
@@ -194,14 +198,18 @@ class ImageCleanModel(BaseModel):
                 pred = self.net_g_ema(img)
             if isinstance(pred, list):
                 pred = pred[-1]
-            self.output = pred
+            detail, base = pred
+            self.base = base
+            self.output = detail
         else:
             self.net_g.eval()
             with torch.no_grad():
                 pred = self.net_g(img)
             if isinstance(pred, list):
                 pred = pred[-1]
-            self.output = pred
+            detail, base = pred
+            self.base = base
+            self.output = detail
             self.net_g.train()
 
     def dist_validation(self, dataloader, current_iter, tb_logger, save_img, rgb2bgr, use_image):
@@ -311,7 +319,7 @@ class ImageCleanModel(BaseModel):
     def get_current_visuals(self):
         out_dict = OrderedDict()
         out_dict['lq'] = self.lq.detach().cpu()
-        out_dict['result'] = self.output.detach().cpu()
+        out_dict['result'] = self.output.detach().cpu() + self.base.detach().cpu()
         if hasattr(self, 'gt'):
             out_dict['gt'] = self.gt.detach().cpu()
         return out_dict

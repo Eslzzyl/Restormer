@@ -10,7 +10,7 @@ from pdb import set_trace as stx
 import numbers
 
 from einops import rearrange
-
+from basicsr.utils.guided_filter import guided_filter
 
 
 ##########################################################################
@@ -255,7 +255,10 @@ class Restormer(nn.Module):
 
     def forward(self, inp_img):
 
-        inp_enc_level1 = self.patch_embed(inp_img)
+        inp_img_base = guided_filter(inp_img, inp_img, r=15, eps=1)
+        inp_img_detail = inp_img - inp_img_base
+
+        inp_enc_level1 = self.patch_embed(inp_img_detail)
         out_enc_level1 = self.encoder_level1(inp_enc_level1)
         
         inp_enc_level2 = self.down1_2(out_enc_level1)
@@ -289,8 +292,7 @@ class Restormer(nn.Module):
             out_dec_level1 = self.output(out_dec_level1)
         ###########################
         else:
-            out_dec_level1 = self.output(out_dec_level1) + inp_img
+            out_dec_level1 = self.output(out_dec_level1) + inp_img_detail
 
-
-        return out_dec_level1
+        return out_dec_level1, inp_img_base
 

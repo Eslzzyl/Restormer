@@ -83,7 +83,8 @@ with torch.no_grad():
         padw = W-w if w%factor!=0 else 0
         input_ = F.pad(input_, (0,padw,0,padh), 'reflect')
 
-        restored = model_restoration(input_)
+        detail, base = model_restoration(input_)
+        restored = detail + base
 
         # Unpad images to original dimensions
         restored = restored[:,:,:h,:w]
